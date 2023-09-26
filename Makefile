@@ -4,13 +4,13 @@
 include Tools.mk
 
 # This should be overridden by current tag (with stripped "v") when running `make dist` on CI.
-VERSION ?= $(shell git describe --tags --long --dirty --always)
+VERSION ?= dev
 
 # This will be overridden with available matrix modes (e.g. default, clang, clang-fips).
 MODE ?= default
 
 BAZEL_FLAGS ?=
-REGISTRY    ?= ghcr.io/istio-ecosystem/authservice
+REGISTRY    ?= creaddiscans
 IMAGE       ?= $(REGISTRY)/authservice:$(VERSION)
 
 # Root dir returns absolute path of current directory. It has a trailing "/".

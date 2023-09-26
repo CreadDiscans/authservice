@@ -9,6 +9,9 @@
 #include "absl/status/status.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_join.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_split.h"
 #include "config/oidc/config.pb.h"
 #include "google/rpc/code.pb.h"
 #include "jwks_resolver.h"
@@ -17,6 +20,7 @@
 #include "src/common/http/headers.h"
 #include "src/common/http/http.h"
 #include "src/common/utilities/time_service.h"
+#include "jwt_verify_lib/struct_utils.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
@@ -65,7 +69,7 @@ google::rpc::Code OidcFilter::Process(
       request->attributes().source().address().socket_address().address(),
       request->attributes().destination().principal(),
       request->attributes().destination().address().socket_address().address());
-
+  
   if (!request->attributes().request().has_http()) {
     spdlog::info("{}: missing http in request", __func__);
     SetStandardResponseHeaders(response);
@@ -683,6 +687,34 @@ google::rpc::Code OidcFilter::RetrieveToken(
       if (!access_token.has_value()) {
         spdlog::info("{}: Missing expected access_token", __func__);
         return google::rpc::Code::INVALID_ARGUMENT;
+      }
+      auto jwt = access_token.value();
+      
+      std::vector<absl::string_view> jwt_split =
+          absl::StrSplit(jwt, '.', absl::SkipEmpty());
+      auto payload_str_base64url_ = std::string(jwt_split[1]);
+      std::string payload_str_;
+      absl::WebSafeBase64Unescape(payload_str_base64url_, &payload_str_);
+      
+      ::google::protobuf::util::JsonParseOptions options;
+      ::google::protobuf::Struct payload_pb_;
+      const auto payload_status = ::google::protobuf::util::JsonStringToMessage(
+          payload_str_, &payload_pb_, options);
+
+      std::vector<std::string> payload_groups;
+      google::jwt_verify::StructUtils payload_getter(payload_pb_);
+      payload_getter.GetStringList("groups", &payload_groups);
+
+      
+      auto config_group = idp_config_.group();
+      bool group_match = false;
+      for (const auto &group : payload_groups) {
+        if (group == config_group) {
+          group_match = true;
+        }
+      }
+      if(!group_match) {
+        return google::rpc::Code::PERMISSION_DENIED;
       }
     }
 
