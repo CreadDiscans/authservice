@@ -714,6 +714,7 @@ google::rpc::Code OidcFilter::RetrieveToken(
         }
       }
       if(!group_match) {
+        SetRedirectHeaders(idp_config_.error_uri(), response);
         return google::rpc::Code::PERMISSION_DENIED;
       }
     }

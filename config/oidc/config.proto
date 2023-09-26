@@ -204,4 +204,5 @@ message OIDCConfig {
     bool skip_verify_peer_cert = 18;
 
     string group = 19;
+    string error_uri = 20;
 }
