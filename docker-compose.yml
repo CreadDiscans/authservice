@@ -18,3 +18,11 @@ services:
       - "10004:10004"
     volumes:
       - ./run/config:/etc/authservice:ro
+  dev:
+    build:
+      dockerfile: ./Dockerfile.dev
+    # command: bash -c "cd /app && make build && make image"
+    command: bash -c "tail -f /dev/null"
+    volumes:
+      - ./:/app
+      - /var/run/docker.sock:/var/run/docker.sock
