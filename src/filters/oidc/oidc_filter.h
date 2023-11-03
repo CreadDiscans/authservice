@@ -136,6 +136,13 @@ class OidcFilter final : public filters::Filter {
   void SetIdTokenHeader(::envoy::service::auth::v3::CheckResponse *response,
                         const std::string &id_token);
 
+
+  void SetUserIdEmailHeader(::envoy::service::auth::v3::CheckResponse *response,
+                        TokenResponse tokenResponse);
+
+  void SetCustomHeader(::envoy::service::auth::v3::CheckResponse *response,
+                        const std::string &key,
+                        const std::string &value);
   /**
    * @brief Given an access token, put it in a request header for the
    * application to consume

@@ -157,6 +157,7 @@ google::rpc::Code OidcFilter::Process(
   spdlog::trace("{}: checking token expiration", __func__);
   if (!RequiredTokensExpired(token_response)) {
     AddTokensToRequestHeaders(response, token_response);
+    SetUserIdEmailHeader(response, token_response);
     spdlog::info("{}: Tokens not expired. Allowing request to proceed.",
                  __func__);
     return google::rpc::Code::OK;
@@ -193,6 +194,7 @@ google::rpc::Code OidcFilter::Process(
         "request to proceed.",
         __func__);
     AddTokensToRequestHeaders(response, *refreshed_token_response);
+    SetUserIdEmailHeader(response, token_response);
     return google::rpc::Code::OK;
   } else {
     spdlog::info(
@@ -509,6 +511,38 @@ absl::optional<std::string> OidcFilter::GetSessionIdFromCookie(
     spdlog::info("{}: {} session id cookie missing", __func__, cookie_name);
     return absl::nullopt;
   }
+}
+
+void OidcFilter::SetUserIdEmailHeader(
+  ::envoy::service::auth::v3::CheckResponse *response,
+  TokenResponse token_response
+  ) {
+  auto access_token = token_response.AccessToken();
+  auto jwt = access_token.value();
+  
+  std::vector<absl::string_view> jwt_split =
+      absl::StrSplit(jwt, '.', absl::SkipEmpty());
+  auto payload_str_base64url_ = std::string(jwt_split[1]);
+  std::string payload_str_;
+  absl::WebSafeBase64Unescape(payload_str_base64url_, &payload_str_);
+  
+  ::google::protobuf::util::JsonParseOptions options;
+  ::google::protobuf::Struct payload_pb_;
+  const auto payload_status = ::google::protobuf::util::JsonStringToMessage(
+      payload_str_, &payload_pb_, options);
+
+  std::string email;
+  google::jwt_verify::StructUtils payload_getter(payload_pb_);
+  payload_getter.GetString("email", &email);
+  SetCustomHeader(response, "kubeflow-userid", email);
+}
+
+void OidcFilter::SetCustomHeader(
+  ::envoy::service::auth::v3::CheckResponse *response,
+  const std::string &key, 
+  const std::string &value
+) {
+  SetHeader(response->mutable_ok_response()->mutable_headers(), key, value);
 }
 
 void OidcFilter::SetAccessTokenHeader(
