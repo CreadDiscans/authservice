@@ -529,9 +529,7 @@ void OidcFilter::SetUserIdEmailHeader(
 
   common::http::TransportSocketOptions opt;
   opt.verify_peer_ = false;
-
   auto res = http_ptr_->Get(
-    // "https://gitlab.dshome.kro.kr/api/v4/user/"
     user_api_uri, headers,
     "", opt, "", ioc, yield
   );
@@ -546,6 +544,7 @@ void OidcFilter::SetUserIdEmailHeader(
   std::string email;
   google::jwt_verify::StructUtils payload_getter(payload_pb_);
   payload_getter.GetString("email", &email);
+  spdlog::info("header email : {}", email);
   SetCustomHeader(response, "kubeflow-userid", email);
 }
 
