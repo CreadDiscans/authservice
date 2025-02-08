@@ -137,11 +137,8 @@ class OidcFilter final : public filters::Filter {
                         const std::string &id_token);
 
 
-  void SetUserIdEmailHeader(
-                        absl::string_view user_api_uri,
-                        ::envoy::service::auth::v3::CheckResponse *response,
-                        TokenResponse tokenResponse,
-                        boost::asio::io_context &ioc, boost::asio::yield_context yield);
+  void SetUserIdEmailHeader(::envoy::service::auth::v3::CheckResponse *response,
+                        TokenResponse tokenResponse);
 
   void SetCustomHeader(::envoy::service::auth::v3::CheckResponse *response,
                         const std::string &key,

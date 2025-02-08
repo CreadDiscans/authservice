@@ -69,7 +69,7 @@ google::rpc::Code OidcFilter::Process(
       request->attributes().source().address().socket_address().address(),
       request->attributes().destination().principal(),
       request->attributes().destination().address().socket_address().address());
-
+  
   if (!request->attributes().request().has_http()) {
     spdlog::info("{}: missing http in request", __func__);
     SetStandardResponseHeaders(response);
@@ -157,7 +157,7 @@ google::rpc::Code OidcFilter::Process(
   spdlog::trace("{}: checking token expiration", __func__);
   if (!RequiredTokensExpired(token_response)) {
     AddTokensToRequestHeaders(response, token_response);
-    SetUserIdEmailHeader(idp_config_.user_api_uri(), response, token_response, ioc, yield);
+    SetUserIdEmailHeader(response, token_response);
     spdlog::info("{}: Tokens not expired. Allowing request to proceed.",
                  __func__);
     return google::rpc::Code::OK;
@@ -194,7 +194,7 @@ google::rpc::Code OidcFilter::Process(
         "request to proceed.",
         __func__);
     AddTokensToRequestHeaders(response, *refreshed_token_response);
-    SetUserIdEmailHeader(idp_config_.user_api_uri(), response, token_response, ioc, yield);
+    SetUserIdEmailHeader(response, token_response);
     return google::rpc::Code::OK;
   } else {
     spdlog::info(
@@ -514,34 +514,22 @@ absl::optional<std::string> OidcFilter::GetSessionIdFromCookie(
 }
 
 void OidcFilter::SetUserIdEmailHeader(
-  absl::string_view user_api_uri,
   ::envoy::service::auth::v3::CheckResponse *response,
-  TokenResponse token_response,
-  boost::asio::io_context &ioc, boost::asio::yield_context yield
+  TokenResponse token_response
   ) {
   auto access_token = token_response.AccessToken();
   auto jwt = access_token.value();
-
-  auto authorization = absl::StrCat("Bearer", " ", jwt);
-  std::map<absl::string_view, absl::string_view> headers = {
-      {common::http::headers::Authorization, authorization},
-  };
-
-  common::http::TransportSocketOptions opt;
-  opt.verify_peer_ = false;
-
-  auto res = http_ptr_->Get(
-    // "https://gitlab.dshome.kro.kr/api/v4/user/"
-    user_api_uri, headers,
-    "", opt, "", ioc, yield
-  );
   
-  auto body = res->body();
+  std::vector<absl::string_view> jwt_split =
+      absl::StrSplit(jwt, '.', absl::SkipEmpty());
+  auto payload_str_base64url_ = std::string(jwt_split[1]);
+  std::string payload_str_;
+  absl::WebSafeBase64Unescape(payload_str_base64url_, &payload_str_);
   
   ::google::protobuf::util::JsonParseOptions options;
   ::google::protobuf::Struct payload_pb_;
   const auto payload_status = ::google::protobuf::util::JsonStringToMessage(
-      body, &payload_pb_, options);
+      payload_str_, &payload_pb_, options);
 
   std::string email;
   google::jwt_verify::StructUtils payload_getter(payload_pb_);
@@ -733,6 +721,35 @@ google::rpc::Code OidcFilter::RetrieveToken(
       if (!access_token.has_value()) {
         spdlog::info("{}: Missing expected access_token", __func__);
         return google::rpc::Code::INVALID_ARGUMENT;
+      }
+      auto jwt = access_token.value();
+      
+      std::vector<absl::string_view> jwt_split =
+          absl::StrSplit(jwt, '.', absl::SkipEmpty());
+      auto payload_str_base64url_ = std::string(jwt_split[1]);
+      std::string payload_str_;
+      absl::WebSafeBase64Unescape(payload_str_base64url_, &payload_str_);
+      
+      ::google::protobuf::util::JsonParseOptions options;
+      ::google::protobuf::Struct payload_pb_;
+      const auto payload_status = ::google::protobuf::util::JsonStringToMessage(
+          payload_str_, &payload_pb_, options);
+
+      std::vector<std::string> payload_groups;
+      google::jwt_verify::StructUtils payload_getter(payload_pb_);
+      payload_getter.GetStringList("groups", &payload_groups);
+
+      
+      auto config_group = idp_config_.group();
+      bool group_match = false;
+      for (const auto &group : payload_groups) {
+        if (group == config_group) {
+          group_match = true;
+        }
+      }
+      if(!group_match) {
+        SetRedirectHeaders(idp_config_.error_uri(), response);
+        return google::rpc::Code::PERMISSION_DENIED;
       }
     }
 

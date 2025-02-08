@@ -202,5 +202,7 @@ message OIDCConfig {
     // in any other cases.
     // Optional.
     bool skip_verify_peer_cert = 18;
-    string user_api_uri = 19;
+
+    string group = 19;
+    string error_uri = 20;
 }
