@@ -258,4 +258,6 @@ message OIDCConfig {
   // in any other cases.
   // Optional.
   google.protobuf.Value skip_verify_peer_cert = 18; // keep this field out from the trusted_ca_config one of for backward compatibility.
+
+  string group = 23;
 }

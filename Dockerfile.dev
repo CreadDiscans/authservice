@@ -1,0 +1,20 @@
+FROM ubuntu:20.04
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt update
+RUN apt install -y wget make gcc cmake g++ ninja-build
+WORKDIR /root
+RUN wget https://go.dev/dl/go1.21.3.linux-amd64.tar.gz
+RUN tar -zxvf go1.21.3.linux-amd64.tar.gz
+RUN ln -s /root/go/bin/go /usr/bin/go
+RUN apt-get install -y ca-certificates curl gnupg
+RUN install -m 0755 -d /etc/apt/keyrings
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+RUN chmod a+r /etc/apt/keyrings/docker.gpg
+# Add the repository to Apt sources:
+RUN echo \
+  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+  tee /etc/apt/sources.list.d/docker.list > /dev/null
+RUN apt-get update
+RUN apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+RUN git config --global --add safe.directory /app

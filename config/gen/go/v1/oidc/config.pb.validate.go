@@ -623,6 +623,8 @@ func (m *OIDCConfig) validate(all bool) error {
 		}
 	}
 
+	// no validation rules for Group
+
 	switch v := m.JwksConfig.(type) {
 	case *OIDCConfig_Jwks:
 		if v == nil {

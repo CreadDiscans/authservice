@@ -24,12 +24,14 @@ SWEYES        ?= github.com/apache/skywalking-eyes/cmd/license-eye@v0.6.0
 KIND          ?= sigs.k8s.io/kind@v0.18.0
 ENVTEST       ?= sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
 
-TARGETS      ?= linux-amd64 linux-arm64 #darwin-amd64 darwin-arm64
+# TARGETS      ?= linux-amd64 linux-arm64 #darwin-amd64 darwin-arm64
+TARGETS      ?= linux-amd64 #darwin-amd64 darwin-arm64
 FIPS_TARGETS := $(filter linux-%,$(TARGETS))
 
 # DOCKER_HUB is exported so that it can be referenced in e2e docker compose files
 export DOCKER_HUB     ?= $(GO_MODULE:github.com/%=ghcr.io/%)
-DOCKER_TARGETS        ?= linux-amd64 linux-arm64
+# DOCKER_TARGETS        ?= linux-amd64 linux-arm64
+DOCKER_TARGETS        ?= linux-amd64
 DOCKER_BUILDER_NAME   ?= $(NAME)-builder
 
 REVISION := $(shell git rev-parse HEAD)

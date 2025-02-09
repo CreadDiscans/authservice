@@ -67,6 +67,11 @@ type oidcHandler struct {
 	httpClient *http.Client
 }
 
+type KeyValue struct {
+	Key string
+	Value string
+}
+
 // NewOIDCHandler creates a new OIDC implementation of the Handler interface.
 func NewOIDCHandler(cfg *oidcv1.OIDCConfig, tlsPool internal.TLSConfigPool, jwks oidc.JWKSProvider,
 	sessions oidc.SessionStoreFactory, clock oidc.Clock, sessionGen oidc.SessionGenerator) (Handler, error) {
@@ -175,6 +180,20 @@ func (o *oidcHandler) Process(ctx context.Context, req *envoy.CheckRequest, resp
 		return nil
 	}
 
+	group := o.config.GetGroup()
+	groupList := getGroupListFromTokenResponse(tokenResponse)
+
+	// check group is included in group list
+	if !contains(groupList, group) {
+		log.Info("group is not matched", "group", group, "groupList", groupList)
+		setDenyResponse(resp, newDenyResponse(), codes.Unauthenticated)
+		return nil
+	}
+
+	customHeader := []KeyValue{
+		{Key: "kubeflow-userid", Value: getEmailFromTokenResponse(tokenResponse)},
+	}
+
 	// If both ID & Access token are still unexpired,
 	// then allow the request to proceed (no need to intervene).
 	log.Debug("checking tokens expiration")
@@ -186,7 +205,7 @@ func (o *oidcHandler) Process(ctx context.Context, req *envoy.CheckRequest, resp
 	}
 	if !expired {
 		log.Info("tokens not expired. Allowing request to proceed")
-		o.allowResponse(resp, tokenResponse)
+		o.allowResponse(resp, tokenResponse, customHeader)
 		return nil
 	}
 
@@ -217,8 +236,53 @@ func (o *oidcHandler) Process(ctx context.Context, req *envoy.CheckRequest, resp
 	}
 
 	log.Info("token refresh successful. Allowing request to proceed")
-	o.allowResponse(resp, refreshedTokens)
+	o.allowResponse(resp, refreshedTokens, customHeader)
 	return nil
+}
+
+func contains(slice []string, target string) bool {
+    for _, str := range slice {
+        if str == target {
+            return true
+        }
+    }
+    return false
+}
+
+// get email from token response
+func getEmailFromTokenResponse(tokenResponse *oidc.TokenResponse) string {
+	jwtToken, err := tokenResponse.ParseIDToken()
+	if err != nil {
+		return ""
+	}
+
+	// get email from token
+	email, ok := jwtToken.Get("email")
+	if !ok {
+		return ""
+	}
+
+	return email.(string)
+}
+
+// get group list from token response
+func getGroupListFromTokenResponse(tokenResponse *oidc.TokenResponse) []string {
+	jwtToken, err := tokenResponse.ParseIDToken()
+	if err != nil {
+		return nil
+	}
+
+	group, ok := jwtToken.Get("groups")
+
+	if !ok {
+		return nil
+	}
+
+	var groupList []string
+	for _, v := range group.([]interface{}) {
+		groupList = append(groupList, v.(string))
+	}
+	return groupList
 }
 
 // redirectToIDP redirects the request to the Identity Provider for authentication.
@@ -662,10 +726,14 @@ func setSetCookieHeader(deny *envoy.DeniedHttpResponse, cookie string) {
 }
 
 // allowResponse populates the CheckResponse as an OK response with the required tokens.
-func (o *oidcHandler) allowResponse(resp *envoy.CheckResponse, tokens *oidc.TokenResponse) {
+func (o *oidcHandler) allowResponse(resp *envoy.CheckResponse, tokens *oidc.TokenResponse, customHeaders []KeyValue) {
 	ok := resp.GetOkResponse()
 	if ok == nil {
 		ok = &envoy.OkHttpResponse{}
+	}
+
+	for _, customHeader := range customHeaders {
+		ok.Headers = append(ok.Headers, &corev3.HeaderValueOption{Header: &corev3.HeaderValue{Key: customHeader.Key, Value: customHeader.Value}})
 	}
 
 	for key, value := range o.encodeTokensToHeaders(tokens) {
